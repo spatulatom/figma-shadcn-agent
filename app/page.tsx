@@ -217,43 +217,7 @@ export default function Home() {
         </div>
       </section>
 
-      {/* Footer with Separator */}
-      <section className="py-8">
-        <div className="container mx-auto px-4">
-          <Separator className="mb-8" />
-          <div className="flex flex-col md:flex-row justify-between items-center gap-4">
-            <div className="flex gap-6">
-              <Link
-                href="/about"
-                className="text-muted-foreground hover:text-foreground"
-              >
-                About
-              </Link>
-              <Link
-                href="/contact"
-                className="text-muted-foreground hover:text-foreground"
-              >
-                Contact
-              </Link>
-              <Link
-                href="#"
-                className="text-muted-foreground hover:text-foreground"
-              >
-                Privacy Policy
-              </Link>
-              <Link
-                href="#"
-                className="text-muted-foreground hover:text-foreground"
-              >
-                Terms
-              </Link>
-            </div>
-            <p className="text-sm text-muted-foreground">
-              © 2025 Whitepace. All rights reserved.
-            </p>
-          </div>
-        </div>
-      </section>
+   
     </div>
   );
 }
