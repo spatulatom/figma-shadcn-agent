@@ -1,5 +1,5 @@
 import Image from "next/image";
-import Link from "next/link";
+
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -9,7 +9,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { Separator } from "@/components/ui/separator";
+
 import {
   Accordion,
   AccordionContent,
@@ -216,8 +216,6 @@ export default function Home() {
           </Card>
         </div>
       </section>
-
-   
     </div>
   );
 }
