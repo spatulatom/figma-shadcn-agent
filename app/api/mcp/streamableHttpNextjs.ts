@@ -1,7 +1,7 @@
+// streamableHttpNextjs.ts
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import { NextRequest } from "next/server";
 
-// Extend the StreamableHTTPServerTransport class to add Next.js support
 declare module "@modelcontextprotocol/sdk/server/streamableHttp.js" {
   interface StreamableHTTPServerTransport {
     handleRequestNextjs(
@@ -10,46 +10,57 @@ declare module "@modelcontextprotocol/sdk/server/streamableHttp.js" {
     ): Promise<{
       status: number;
       headers: Record<string, string>;
-      body: string;
+      body: string | ReadableStream;
     }>;
   }
 }
 
-// Add a method to handle Next.js requests
 StreamableHTTPServerTransport.prototype.handleRequestNextjs = async function (
   req: NextRequest,
   body?: any
-): Promise<{ status: number; headers: Record<string, string>; body: string }> {
+): Promise<{ status: number; headers: Record<string, string>; body: string | ReadableStream }> {
+  console.log("handleRequestNextjs called with method:", req.method);
+  console.log("Request headers:", Object.fromEntries(req.headers.entries()));
+  console.log("Request body:", body);
+
   const method = req.method;
   let responseStatus = 200;
   let responseHeaders: Record<string, string> = {};
-  let responseBody = "";
+  let responseBody: string | ReadableStream = "";
 
-  // Create a mock response object
   const res = {
     status: (status: number) => {
+      console.log("Setting response status:", status);
       responseStatus = status;
       return res;
     },
     setHeader: (name: string, value: string) => {
+      console.log(`Setting header: ${name}=${value}`);
       responseHeaders[name] = value;
       return res;
     },
     getHeader: (name: string) => {
-      return req.headers.get(name);
+      const value = req.headers.get(name) || (name === "accept" ? "application/json, text/event-stream" : undefined);
+      console.log(`Getting header: ${name}=${value}`);
+      return value;
     },
     write: (chunk: string) => {
-      responseBody += chunk;
+      console.log("Writing chunk:", chunk);
+      if (typeof responseBody === "string") {
+        responseBody += chunk;
+      }
       return true;
     },
     end: (data?: string) => {
-      if (data) {
+      console.log("Ending response with data:", data);
+      if (data && typeof responseBody === "string") {
         responseBody += data;
       }
       return res;
     },
     headersSent: false,
     writeHead: (status: number, headers?: Record<string, string>) => {
+      console.log("Writing head:", { status, headers });
       responseStatus = status;
       if (headers) {
         responseHeaders = { ...responseHeaders, ...headers };
@@ -57,17 +68,34 @@ StreamableHTTPServerTransport.prototype.handleRequestNextjs = async function (
       return res;
     },
     getHeaderNames: () => {
-      return Array.from(req.headers.keys());
+      const names = Array.from(req.headers.keys());
+      console.log("Header names:", names);
+      return names;
     },
   };
 
-  // Handle the request using the original method
-  if (method === "POST" && body) {
-    await this.handleRequest(req as any, res as any, body);
-  } else {
-    await this.handleRequest(req as any, res as any);
+  try {
+    if (method === "POST" && body) {
+      console.log("Handling POST request with body:", body);
+      await this.handleRequest(req as any, res as any, body);
+    } else {
+      console.log("Handling non-POST request");
+      await this.handleRequest(req as any, res as any);
+    }
+  } catch (error) {
+    console.error("Error in handleRequestNextjs:", error);
+    responseStatus = 500;
+    responseBody = JSON.stringify({
+      jsonrpc: "2.0",
+      error: {
+        code: -32603,
+        message: `Transport error: ${(error as Error).message}`,
+      },
+      id: body?.id ?? null,
+    });
   }
 
+  console.log("Returning transport response:", { status: responseStatus, headers: responseHeaders, body: responseBody });
   return {
     status: responseStatus,
     headers: responseHeaders,

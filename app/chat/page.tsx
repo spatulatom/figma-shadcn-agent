@@ -5,7 +5,7 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
-import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
+import { CustomStreamableHTTPClientTransport } from "@/app/api/mcp/customTransport";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -24,17 +24,15 @@ import {
   FormMessage,
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Separator } from "@/components/ui/separator";
 
-// Define form schema with strictly typed values
 const formSchema = z.object({
   prompt: z.string().min(1, "Please enter a prompt"),
-  model: z.string(), // Removed default here, will be set in useForm
+  model: z.string(),
   temperature: z.number().min(0).max(1),
 });
 
-// Create a type from the schema
 type FormValues = z.infer<typeof formSchema>;
 
 type Message = {
@@ -43,66 +41,109 @@ type Message = {
   model?: string;
 };
 
+const InitializeResultSchema = z.object({
+  protocolVersion: z.string(),
+});
+
 export default function ChatPage() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [client, setClient] = useState<Client | null>(null);
   const [isConnecting, setIsConnecting] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
-  const [activeModel, setActiveModel] = useState<
-    "chatGPT" | "claude" | "gemini"
-  >("chatGPT");
+  const [activeModel, setActiveModel] = useState<"chatGPT" | "claude" | "gemini">("chatGPT");
   const scrollRef = useRef<HTMLDivElement>(null);
 
   const form = useForm<FormValues>({
     resolver: zodResolver(formSchema),
     defaultValues: {
       prompt: "",
-      model: "gpt-4o", // Default model set here
+      model: "gpt-4o",
       temperature: 0.7,
     },
   });
 
-  // Connect to the MCP server
   useEffect(() => {
-    const connectToServer = async () => {
-      try {
-        setIsConnecting(true);
-        const transport = new StreamableHTTPClientTransport(
-          new URL("/api/mcp", window.location.origin)
-        );
+  const connectToServer = async () => {
+    try {
+      setIsConnecting(true);
+      console.log("Initializing MCP client with URL:", "/api/mcp");
 
-        const newClient = new Client({
-          name: "chat-client",
-          version: "1.0.0",
-        });
+      const transport = new CustomStreamableHTTPClientTransport(
+        new URL("/api/mcp", window.location.origin),
+        {
+          defaultRequestInit: {
+            headers: {
+              Accept: "application/json, text/event-stream",
+              "Content-Type": "application/json",
+            },
+          },
+        }
+      );
 
-        await newClient.connect(transport);
-        setClient(newClient);
-      } catch (error) {
-        console.error("Failed to connect to MCP server:", error);
-      } finally {
-        setIsConnecting(false);
-      }
-    };
+      console.log("Transport created with options:", {
+        defaultRequestInit: {
+          headers: {
+            Accept: "application/json, text/event-stream",
+            "Content-Type": "application/json",
+          },
+        },
+      });
 
-    connectToServer();
+      const newClient = new Client({
+        name: "chat-client",
+        version: "1.0.0",
+      });
 
-    return () => {
-      // Clean up the connection when component unmounts
-      if (client) {
-        client.close();
-      }
-    };
-  }, []);
+      console.log("Connecting client to transport...");
+      await newClient.connect(transport);
+      console.log("Client connected, sessionId:", transport.sessionId);
 
-  // Scroll to bottom when messages update
+      const initRequest = {
+        jsonrpc: "2.0",
+        method: "initialize",
+        params: {
+          protocolVersion: "1.0.0", // Match server expectation
+          capabilities: {},
+          clientInfo: {
+            name: "chat-client",
+            version: "1.0.0",
+          },
+        },
+        id: 1, // Use a positive integer
+      };
+      console.log("Sending initialize request:", initRequest);
+
+      const result = await newClient.request(
+        initRequest,
+        InitializeResultSchema,
+        {}
+      );
+      console.log("Initialize response:", result);
+      console.log("Transport sessionId after initialize:", transport.sessionId);
+
+      setClient(newClient);
+    } catch (error) {
+      console.error("Failed to connect to MCP server:", error);
+    } finally {
+      setIsConnecting(false);
+    }
+  };
+
+  connectToServer();
+
+  return () => {
+    if (client) {
+      client.close();
+    }
+  };
+}, []);
+
   useEffect(() => {
     if (scrollRef.current) {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
     }
   }, [messages]);
 
-  // Update the default model when tab changes
   useEffect(() => {
     const defaultModels = {
       chatGPT: "gpt-4o",
@@ -139,12 +180,9 @@ export default function ChatPage() {
         },
       });
 
-      // Safely access the content
       let responseText = "No response";
-      // Ensure result.content is an array and has elements
       if (Array.isArray(result.content) && result.content.length > 0) {
         const firstBlock = result.content[0];
-        // Check if the firstBlock is a ContentBlock and has a text property
         if (
           firstBlock &&
           typeof firstBlock === "object" &&
@@ -160,7 +198,6 @@ export default function ChatPage() {
           "text" in firstBlock &&
           typeof firstBlock.text === "string"
         ) {
-          // Handle cases where content might be nested differently but is still a text block
           responseText = firstBlock.text;
         }
       }
@@ -174,13 +211,11 @@ export default function ChatPage() {
       setMessages((prev) => [...prev, assistantMessage]);
     } catch (error) {
       console.error("Error calling tool:", error);
-
       const errorMessage: Message = {
         role: "assistant",
         content: `Error: ${(error as Error).message || "Unknown error"}`,
         model: data.model,
       };
-
       setMessages((prev) => [...prev, errorMessage]);
     } finally {
       setIsProcessing(false);
@@ -224,9 +259,7 @@ export default function ChatPage() {
                     <div key={index} className="mb-4">
                       <div
                         className={`flex items-start gap-2 ${
-                          message.role === "user"
-                            ? "justify-end"
-                            : "justify-start"
+                          message.role === "user" ? "justify-end" : "justify-start"
                         }`}
                       >
                         <div
@@ -236,13 +269,9 @@ export default function ChatPage() {
                               : "bg-gray-200 dark:bg-gray-800 text-gray-900 dark:text-gray-100"
                           }`}
                         >
-                          <div className="whitespace-pre-wrap">
-                            {message.content}
-                          </div>
+                          <div className="whitespace-pre-wrap">{message.content}</div>
                           {message.model && message.role === "assistant" && (
-                            <div className="text-xs mt-1 opacity-70">
-                              Model: {message.model}
-                            </div>
+                            <div className="text-xs mt-1 opacity-70">Model: {message.model}</div>
                           )}
                         </div>
                       </div>
@@ -255,10 +284,7 @@ export default function ChatPage() {
             <Separator className="my-4" />
 
             <Form {...form}>
-              <form
-                onSubmit={form.handleSubmit(onSubmit)}
-                className="space-y-4"
-              >
+              <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
                 <div className="grid grid-cols-4 gap-4">
                   <FormField
                     control={form.control}
@@ -311,10 +337,7 @@ export default function ChatPage() {
                             {...field}
                             disabled={isProcessing || isConnecting || !client}
                           />
-                          <Button
-                            type="submit"
-                            disabled={isProcessing || isConnecting || !client}
-                          >
+                          <Button type="submit" disabled={isProcessing || isConnecting || !client}>
                             {isProcessing ? "Sending..." : "Send"}
                           </Button>
                         </div>
