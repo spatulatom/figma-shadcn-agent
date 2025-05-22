@@ -17,8 +17,7 @@ const Navbar = () => {
           <Link href="/" className="text-2xl font-bold text-primary">
             Whitepace
           </Link>
-        </div>
-
+        </div>{" "}
         {/* Desktop navigation */}
         <div className="hidden md:flex items-center gap-8">
           <Link
@@ -39,15 +38,19 @@ const Navbar = () => {
           >
             Contact
           </Link>
+          <Link
+            href="/chat"
+            className="text-foreground hover:text-primary transition-colors"
+          >
+            AI Chat
+          </Link>
         </div>
-
         {/* Actions section - desktop */}
         <div className="hidden md:flex items-center gap-4">
           <ThemeToggle />
           <Button variant="outline">Login</Button>
           <Button>Try Whitepace free</Button>
         </div>
-
         {/* Mobile menu button */}
         <div className="flex items-center gap-4 md:hidden">
           <ThemeToggle />
@@ -90,13 +93,20 @@ const Navbar = () => {
               onClick={() => setMobileMenuOpen(false)}
             >
               About
-            </Link>
+            </Link>{" "}
             <Link
               href="/contact"
               className="text-foreground hover:text-primary transition-colors py-2"
               onClick={() => setMobileMenuOpen(false)}
             >
               Contact
+            </Link>
+            <Link
+              href="/chat"
+              className="text-foreground hover:text-primary transition-colors py-2"
+              onClick={() => setMobileMenuOpen(false)}
+            >
+              AI Chat
             </Link>
           </div>
 
